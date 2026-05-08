@@ -127,8 +127,23 @@ def _render_soul_form() -> None:
     else:
         st.subheader("创建新灵魂 Agent")
 
-    # Prefill values
+    # Prefill values — from editing agent, or from AI-generated session state
     defaults = editing_agent or {}
+    if not editing_agent:
+        # Pop AI-generated prefill values (consumed once)
+        for key, skey in [
+            ("name", "_soul_name_prefill"),
+            ("avatar", "_soul_avatar_prefill"),
+            ("soul_md", "_soul_md_prefill"),
+            ("worker_thought", "_soul_wt_prefill"),
+            ("position", "_soul_pos_prefill"),
+            ("model_id", "_soul_model_prefill"),
+            ("skills", "_soul_skills_prefill"),
+            ("lifespan_budget", "_soul_lifespan_prefill"),
+        ]:
+            val = st.session_state.pop(skey, None)
+            if val is not None and val != "":
+                defaults[key] = val
 
     with st.form("soul_agent_form", clear_on_submit=not editing_agent):
         name = st.text_input("名称 *", value=defaults.get("name", ""),
@@ -236,19 +251,39 @@ def _render_soul_form() -> None:
 
 
 def _render_ai_generate() -> None:
-    st.caption("描述你想要的 Agent 人格，AI 自动生成灵魂 MD。")
-    ai_desc = st.text_area(
-        "描述",
-        placeholder="例如：一个幽默的资深全栈工程师，喜欢写测试，讨厌没注释的代码",
-        height=80,
-        key="ai_soul_agent_desc",
-    )
-    if st.button("🤖 生成灵魂 MD", key="ai_gen_soul_agent_btn"):
+    st.caption("描述你想要的 Agent，AI 自动生成完整的灵魂 Agent（含人格、头像、技能、职位等全部配置）。")
+
+    # Model selector for AI generation
+    from data.model_store import list_models
+    models = list_models()
+    model_options = {m["id"]: f"{m['name']} ({m.get('model','')})" for m in models}
+    if not model_options:
+        st.warning("请先在模型配置中添加模型")
+        return
+
+    gen_col1, gen_col2 = st.columns([2, 1])
+    with gen_col1:
+        ai_desc = st.text_area(
+            "描述",
+            placeholder="例如：一个幽默的资深全栈工程师，喜欢写测试，讨厌没注释的代码，擅长Python和React",
+            height=80,
+            key="ai_soul_agent_desc",
+        )
+    with gen_col2:
+        gen_model = st.selectbox(
+            "生成模型",
+            list(model_options.keys()),
+            format_func=lambda x: model_options[x],
+            key="ai_soul_agent_model",
+        )
+
+    if st.button("🤖 生成完整灵魂 Agent", key="ai_gen_soul_agent_btn", use_container_width=True):
         if ai_desc.strip():
-            with st.spinner("AI 生成中..."):
+            with st.spinner("AI 正在生成灵魂 Agent..."):
                 try:
-                    result = _ai_generate_soul_agent(ai_desc)
+                    result = _ai_generate_soul_agent(ai_desc, gen_model)
                     st.session_state["ai_soul_agent_result"] = result
+                    st.success("已生成！")
                 except Exception as e:
                     st.error(f"生成失败: {e}")
         else:
@@ -256,36 +291,110 @@ def _render_ai_generate() -> None:
 
     if "ai_soul_agent_result" in st.session_state:
         r = st.session_state["ai_soul_agent_result"]
-        st.text_input("预填名称", value=r.get("name", ""), key="ai_sa_name")
-        st.text_area("预填灵魂 MD", value=r.get("soul_md", ""), height=200, key="ai_sa_md")
-        st.text_input("预填碎碎念", value=r.get("worker_thought", ""), key="ai_sa_wt")
-        if st.button("📋 填入表单"):
-            st.session_state["edit_soul_agent"] = ""  # clear edit mode
+        st.divider()
+        st.markdown("### 生成预览")
+
+        prev_col1, prev_col2 = st.columns(2)
+        with prev_col1:
+            st.text_input("名称", value=r.get("name", ""), key="ai_sa_name_preview")
+            st.text_input("头像", value=r.get("avatar", "🤖"), key="ai_sa_avatar_preview")
+            st.text_input("碎碎念", value=r.get("worker_thought", ""), key="ai_sa_wt_preview")
+            position_preview = r.get("position", "")
+            st.selectbox(
+                "职位", ["", "ceo", "dept_head", "member"],
+                index=["", "ceo", "dept_head", "member"].index(position_preview) if position_preview in ["ceo", "dept_head", "member"] else 0,
+                format_func=_position_label,
+                key="ai_sa_pos_preview",
+            )
+        with prev_col2:
+            st.text_input("绑定模型", value=r.get("model_id", ""), key="ai_sa_model_preview",
+                         placeholder="留空使用默认")
+            skills = r.get("skills", [])
+            st.caption(f"推荐技能 ({len(skills)}): {', '.join(skills[:8])}")
+            st.number_input("寿命预算", value=r.get("lifespan_budget", 128000),
+                          min_value=16000, max_value=2000000, step=16000, key="ai_sa_ls_preview")
+
+        st.text_area("灵魂 MD", value=r.get("soul_md", ""), height=200, key="ai_sa_md_preview")
+
+        # Auto-fill button — writes to session state so the form picks it up
+        if st.button("📋 一键填入创建表单", use_container_width=True, key="ai_sa_fill_btn"):
+            st.session_state["_soul_name_prefill"] = r.get("name", "")
+            st.session_state["_soul_avatar_prefill"] = r.get("avatar", "🤖")
+            st.session_state["_soul_md_prefill"] = r.get("soul_md", "")
+            st.session_state["_soul_wt_prefill"] = r.get("worker_thought", "")
+            st.session_state["_soul_pos_prefill"] = r.get("position", "")
+            st.session_state["_soul_model_prefill"] = r.get("model_id", "")
+            st.session_state["_soul_skills_prefill"] = r.get("skills", [])
+            st.session_state["_soul_lifespan_prefill"] = r.get("lifespan_budget", 128000)
+            st.success("已填入表单，切换到「创建/编辑」标签页查看")
             st.rerun()
 
 
 # ── AI Generator ────────────────────────────────────
 
-def _ai_generate_soul_agent(user_desc: str) -> dict:
+def _ai_generate_soul_agent(user_desc: str, model_id: str = "") -> dict:
+    """AI generate a complete soul agent config: name, avatar, soul_md,
+    worker_thought, position, recommended skills, lifespan, model preference."""
     from ui.skills import _ai_call_to_text
+    from skills.registry import get_registry as _get_reg
     import json as _json, re as _re
 
-    prompt = f"""根据以下描述生成一个灵魂 Agent 的配置。
+    # Collect available skill IDs for the AI to pick from
+    registry = _get_reg()
+    all_skills = registry.list_all()
+    skill_list = "\n".join(
+        f"- {sid}: {info.name} — {info.desc[:80]}"
+        for sid, info in list(all_skills.items())[:60]
+    )
+
+    prompt = f"""根据以下描述生成一个完整的灵魂 Agent 配置。
 
 ## 用户描述
 {user_desc}
 
-## 要求
-- name: 简洁中文名（5-10字）
-- soul_md: 完整Markdown，包含# 角色名、## 性格、## 行事风格、## 底线、## 对话风格
-- worker_thought: 打工人今日心情（≤20字）
+## 可用工具列表（从下面选最合适的 4-8 个技能 ID）
+{skill_list}
 
-## 输出格式（严格JSON）
-{{"name":"名称","soul_md":"完整Markdown","worker_thought":"心情"}}
+## 必须生成的字段
+- name: 简洁中文名（5-12字）
+- avatar: 一个最贴切这个角色的 emoji（单字符最佳）
+- soul_md: 完整Markdown人格档案，包含以下板块：
+  # 角色名
+  ## 我是谁（一句话身份定位）
+  ## 性格（3-5条核心特质）
+  ## 行事风格（工作方法和偏好）
+  ## 底线（绝对不能做的事）
+  ## 对话风格（怎么说话）
+- worker_thought: 打工人今日心情碎碎念（≤20字，带幽默感）
+- position: 合适职位，选 ceo|dept_head|member 其一
+  - ceo: 统筹全局的总经理
+  - dept_head: 某领域负责人，能带队
+  - member: 专业执行者
+- skills: 从上面列表里挑最合适的 skill IDs 列表（4-8个）
+- lifespan_budget: 寿命预算推荐值，16000-256000，普通角色 128000
+- model_id: 留空 ""（用户自己绑定模型）
+
+## 输出格式（严格JSON，不要Markdown代码块）
+{{
+  "name": "名称",
+  "avatar": "🐱",
+  "soul_md": "# 角色名\\n\\n## 我是谁\\n...\\n\\n## 性格\\n- ...",
+  "worker_thought": "心情",
+  "position": "member",
+  "skills": ["read_file", "write_file", "terminal"],
+  "lifespan_budget": 128000,
+  "model_id": ""
+}}
 
 现在请输出JSON。"""
 
-    raw = _ai_call_to_text(prompt, system="你是灵魂设计师。只输出JSON，不要markdown代码块。")
+    raw = _ai_call_to_text(
+        prompt,
+        system="你是专业的Agent灵魂设计师。你只输出严格JSON，不要任何markdown代码块，不要解释。",
+        model_id=model_id,
+    )
+
+    # Extract JSON
     m = _re.search(r'```(?:json)?\s*(\{.*?\})\s*```', raw, _re.DOTALL)
     if m:
         raw = m.group(1)
@@ -293,7 +402,31 @@ def _ai_generate_soul_agent(user_desc: str) -> dict:
         a, b = raw.find('{'), raw.rfind('}')
         if a >= 0 and b > a:
             raw = raw[a:b+1]
-    return _json.loads(raw)
+
+    result = _json.loads(raw)
+
+    # Validate and clean up
+    if not isinstance(result.get("name"), str) or not result["name"].strip():
+        result["name"] = "未命名Agent"
+    if not isinstance(result.get("soul_md"), str) or len(result["soul_md"].strip()) < 20:
+        result["soul_md"] = f"# {result.get('name', 'Agent')}\n\n## 我是谁\n{user_desc[:200]}\n\n## 性格\n- 专业可靠\n\n## 行事风格\n- 按任务执行\n\n## 底线\n- 不做破坏性操作\n\n## 对话风格\n- 简洁专业"
+    if not isinstance(result.get("worker_thought"), str):
+        result["worker_thought"] = "今天认真干活"
+    if result.get("position") not in ("ceo", "dept_head", "member"):
+        result["position"] = "member"
+    if not isinstance(result.get("skills"), list):
+        result["skills"] = ["read_file", "write_file", "terminal", "list_files"]
+    # Filter to only valid skill IDs
+    valid_ids = set(all_skills.keys())
+    result["skills"] = [s for s in result["skills"] if s in valid_ids][:8]
+    if not result["skills"]:
+        result["skills"] = ["read_file", "write_file", "terminal", "list_files"]
+    if not isinstance(result.get("lifespan_budget"), (int, float)):
+        result["lifespan_budget"] = 128000
+    result["lifespan_budget"] = max(16000, min(2000000, int(result["lifespan_budget"])))
+    result["model_id"] = result.get("model_id", "") or ""
+
+    return result
 
 
 # ── Helpers ─────────────────────────────────────────
