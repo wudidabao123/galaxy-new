@@ -623,7 +623,32 @@ def run_parallel_stages(
     run_id: str = "",
     on_stage_complete: Callable | None = None,
 ) -> list[dict]:
-    """Run all parallel stages. Returns list of stage result dicts."""
+    """Run all parallel stages (blocking). Returns list of stage result dicts.
+
+    Prefer run_parallel_stages_stream() for live UI rendering.
+    """
+    return list(run_parallel_stages_stream(
+        team, history, user_name, max_turns,
+        workspace_root=workspace_root, run_id=run_id,
+        on_stage_complete=on_stage_complete,
+    ))
+
+
+def run_parallel_stages_stream(
+    team: dict,
+    history: list[dict],
+    user_name: str,
+    max_turns: int,
+    workspace_root: Any = None,
+    run_id: str = "",
+    on_stage_complete: Callable | None = None,
+):
+    """Generator: run parallel stages, yielding (agent_info, payload, stage_name)
+    tuples as each agent completes. Gives the UI streaming-like responsiveness.
+    
+    Yields: (agent_info_dict, payload_dict, stage_name_str)
+    After all agents in a stage complete, yields (None, stage_summary_dict, stage_name).
+    """
     from config import DATA_DIR
     if workspace_root is None:
         from pathlib import Path as _Path
@@ -680,23 +705,26 @@ def run_parallel_stages(
             }
             for future in concurrent.futures.as_completed(future_map):
                 ainfo = future_map[future]
+                agent_name = ainfo["display_name"]
                 try:
                     payload = future.result(timeout=300)
-                    parallel_results[ainfo["display_name"]] = payload
                 except (concurrent.futures.TimeoutError, Exception) as e:
                     if isinstance(e, concurrent.futures.TimeoutError):
-                        clean = f"[Error: agent {ainfo['display_name']} timed out after 300s]"
+                        clean = f"[Error: agent {agent_name} timed out after 300s]"
                     else:
                         clean = f"[Error: {e}]"
                     import importlib
                     sm = importlib.import_module("core.structured_output")
-                    structured = sm.parse_agent_stage_result(clean, ainfo["display_name"])
+                    structured = sm.parse_agent_stage_result(clean, agent_name)
                     guard = enhanced_guard_check(structured, workspace_root=workspace_root)
-                    parallel_results[ainfo["display_name"]] = {
+                    payload = {
                         "content": clean, "events": [],
                         "structured": structured, "guard": guard,
                         "retry_count": 0,
                     }
+                parallel_results[agent_name] = payload
+                # 🔥 Yield immediately so the UI can render this agent NOW
+                yield (ainfo, payload, stage_name)
 
         # Generate handoff
         if run_id:
@@ -710,17 +738,23 @@ def run_parallel_stages(
             "avatar": "docs",
         })
 
-        stage_results_list.append({
+        stage_data = {
             "stage_name": stage_name,
             "results": parallel_results,
-        })
+        }
+        stage_results_list.append(stage_data)
 
         if on_stage_complete:
             on_stage_complete(stage_name, parallel_results)
 
+        # Yield stage completion marker so UI can update handoff context
+        yield (None, stage_data, stage_name)
+
         remaining_turns -= len(batch_agents)
 
-    return stage_results_list
+    # Attach final stage list for external consumers
+    if stage_results_list:
+        stage_results_list[-1]["_all_stages"] = stage_results_list
 
 
 def _get_parallel_stages(team: dict) -> list[dict]:

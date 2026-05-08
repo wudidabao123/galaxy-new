@@ -9,6 +9,7 @@ from config import (DATA_DIR, UPLOADS_DIR, GENERATED_DIR, RUNS_DIR,
                     CHAT_ATTACHMENT_TYPES, AGENT_COLORS, AGENT_AVATARS)
 from core.enums import ChatStyle, PermissionMode
 from core.orchestrator import (run_round_robin_stream, run_parallel_stages,
+                               run_parallel_stages_stream,
                                _sync_agent_stream, _build_task_payload,
                                _is_tool_event_chunk, _split_tool_events)
 from core.agent_factory import create_agents_for_team
@@ -271,7 +272,11 @@ def render_chat_tab() -> None:
         if msg.get("hidden"): continue
         avatar = msg.get("avatar", "")
         display_avatar = avatar_for_chat(avatar)
-        with st.chat_message(msg["source"], avatar=display_avatar):
+        source = msg["source"]
+        with st.chat_message(source, avatar=display_avatar):
+            # 🔥 Agent name header — fix missing name display in history
+            stage_tag = f" · {msg['stage']}" if msg.get("stage") else ""
+            st.caption(f"🐙 **{source}**{stage_tag}")
             render_message_content(msg.get("content", ""))
             render_attachments(msg.get("attachments", []))
 
@@ -351,36 +356,43 @@ def render_chat_tab() -> None:
         st.session_state["_pending_agents"] = False; return
 
     # ══════════════════════════════════════════════════
-    # PARALLEL MODE (ThreadPool concurrent stages)
+    # PARALLEL MODE (generator — render each agent as it finishes)
     # ══════════════════════════════════════════════════
     if chat_style == "parallel" and remaining_turns > 0:
-        stage_results = run_parallel_stages(team, cur_history, user_name, remaining_turns,
-                                            workspace_root=workspace_root, run_id=run_id)
-        for stage_data in stage_results:
-            stage_name = stage_data["stage_name"]
-            for agent_name, payload in stage_data["results"].items():
-                ainfo = next((a for a in agent_infos if a["display_name"] == agent_name), None)
-                if not ainfo: continue
-                full = str(payload.get("content", "")).strip()
-                tool_events = payload.get("events", []) or []
-                guard = payload.get("guard")
-                structured = payload.get("structured")
-                chat_avatar = avatar_for_chat(ainfo["avatar"])
-                if full:
-                    with st.chat_message(agent_name, avatar=chat_avatar):
-                        if tool_events:
-                            st.markdown(render_tool_events(tool_events), unsafe_allow_html=True)
-                        render_agent_bubble(agent_name, full, ainfo["color"], ainfo["avatar"], stage_name)
-                        # RICH CONTENT after bubble (Mermaid + images + tables)
-                        render_message_content(full)
-                        if guard: render_guard_result(guard, payload.get("retry_count", 0), structured)
-                    cur_history.append({"source": agent_name, "content": full,
-                                        "avatar": ainfo["avatar"], "stage": stage_name})
-                    remaining_turns -= 1
-                save_agent_diff(run_id, agent_name, workspace_root)
-                raw_for_usage = "\n".join(payload.get("raw_outputs", []))
-                record_model_usage(ainfo.get("model_id", ""), ainfo.get("model_cfg", {}),
-                                   str(payload.get("structured", "")), raw_for_usage)
+        for ainfo, payload, stage_name in run_parallel_stages_stream(
+            team, cur_history, user_name, remaining_turns,
+            workspace_root=workspace_root, run_id=run_id,
+        ):
+            # Stage completion marker (None agent = handoff done)
+            if ainfo is None:
+                continue
+
+            agent_name = ainfo["display_name"]
+            full = str(payload.get("content", "")).strip()
+            tool_events = payload.get("events", []) or []
+            guard = payload.get("guard")
+            structured = payload.get("structured")
+            chat_avatar = avatar_for_chat(ainfo["avatar"])
+
+            with st.chat_message(agent_name, avatar=chat_avatar):
+                # 🔥 Agent name header — fix missing name display
+                st.caption(f"🐙 **{agent_name}** · {stage_name}")
+                if tool_events:
+                    st.markdown(render_tool_events(tool_events), unsafe_allow_html=True)
+                render_agent_bubble(agent_name, full, ainfo["color"], ainfo["avatar"], stage_name)
+                render_message_content(full)
+                if guard:
+                    render_guard_result(guard, payload.get("retry_count", 0), structured)
+
+            if full:
+                cur_history.append({"source": agent_name, "content": full,
+                                    "avatar": ainfo["avatar"], "stage": stage_name})
+                remaining_turns -= 1
+
+            save_agent_diff(run_id, agent_name, workspace_root)
+            raw_for_usage = "\n".join(payload.get("raw_outputs", []))
+            record_model_usage(ainfo.get("model_id", ""), ainfo.get("model_cfg", {}),
+                               str(payload.get("structured", "")), raw_for_usage)
 
     # ══════════════════════════════════════════════════
     # ROUND-ROBIN / FREE MODE (streaming, word by word)
@@ -400,6 +412,8 @@ def render_chat_tab() -> None:
                 task = _build_task_payload(task_history, display_name, user_name)
 
                 with st.chat_message(display_name, avatar=chat_avatar):
+                    # 🔥 Agent name header — fix missing name display
+                    st.caption(f"🐙 **{display_name}**")
                     tool_placeholder = st.empty()
                     stream_placeholder = st.empty()
                     full = ""
