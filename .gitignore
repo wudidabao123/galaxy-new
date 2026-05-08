@@ -1,0 +1,65 @@
+# Pip cache
+pip/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Generated outputs (huge binary)
+generated/exports/
+generated/academic/
+generated/figures/
+generated/downloads/
+generated/images/
+generated/patches/
+
+# Intermediate scripts
+_iter*.py
+_audit*.py
+_check*.py
+_extract*.py
+_fix*.py
+_paper*.py
+_reinit*.py
+_run*.py
+_search*.py
+_swap*.py
+_test*.py
+_verify*.py
+_schema.py
+_send*.py
+_quick*.py
+AUDIT_PROGRESS.md
+ITERATION_ISSUES.json
+ITERATION_*_FIXES.json
+
+# Database
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# Secrets / local portable runtime
+.env
+.keys/
+dist/
+.portable-cache/
+runtime/
+workspace/
+tools/cloudflared.exe
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Streamlit
+.streamlit/
