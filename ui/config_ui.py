@@ -33,17 +33,6 @@ def _get_project_enabled() -> bool:
         return False
 
 
-def _get_soul_md_paths() -> list[str]:
-    try:
-        conn = get_db()
-        row = conn.execute("SELECT value FROM project_state WHERE key = 'soul_md_paths'").fetchone()
-        if row and row[0]:
-            return [p for p in row[0].split("\n") if p.strip()]
-    except Exception:
-        pass
-    return []
-
-
 def render_config_tab() -> None:
     st.header("⚙️ 配置")
 

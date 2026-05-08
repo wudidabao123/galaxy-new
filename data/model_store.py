@@ -100,7 +100,7 @@ def _save_key_file(key_ref: str, api_key: str) -> None:
         # Restrict .keys/ directory to owner-only access
         try:
             import stat
-            os.chmod(path.parent, stat.S_IRWXU)  # 0o700
+            _os.chmod(path.parent, stat.S_IRWXU)  # 0o700
         except Exception:
             pass
         # WARNING: base85 is ENCODING, not encryption.

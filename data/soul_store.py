@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime
 
 from data.database import get_db, db_transaction
-from skills.registry import build_all_skills_summary, build_skills_summary_for
+from skills.registry import build_skills_summary_for
 
 
 # ── CRUD ─────────────────────────────────────────────
