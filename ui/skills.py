@@ -39,7 +39,7 @@ def _ai_call_json(prompt: str, system: str = "你是精确的JSON生成器，只
         ], "temperature": 0.3, "max_tokens": 2048}).encode(),
         headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
     )
-    resp = urlopen(req, context=ctx, timeout=30)
+    resp = urlopen(req, context=ctx, timeout=120)
     data = json.loads(resp.read().decode())
     content = data["choices"][0]["message"]["content"]
     m = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', content, re.DOTALL)
@@ -83,7 +83,7 @@ def _ai_call_to_text(prompt: str, system: str = "你是一个专业的 AI 助手
         ], "temperature": 0.5, "max_tokens": 2048}).encode(),
         headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
     )
-    resp = urlopen(req, context=ctx, timeout=30)
+    resp = urlopen(req, context=ctx, timeout=120)
     data = json.loads(resp.read().decode())
     return data["choices"][0]["message"]["content"]
 
