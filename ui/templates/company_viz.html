@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: #0f1117;
+  color: #e2e8f0;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  overflow: hidden;
+  height: 100vh;
+}
+
+#viz-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.office {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  transition: left 0.8s ease-in-out, top 0.8s ease-in-out;
+}
+
+.office-building {
+  width: 110px;
+  height: 90px;
+  border-radius: 12px;
+  border: 2px solid #2d3748;
+  background: linear-gradient(180deg, #1a1d2e 0%, #141725 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  position: relative;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+}
+
+.office-building.chairman {
+  border-color: #f6c23e;
+  box-shadow: 0 0 30px rgba(246,194,62,0.2);
+  width: 130px;
+  height: 95px;
+}
+.office-building.ceo {
+  border-color: #4ECDC4;
+  box-shadow: 0 0 25px rgba(78,205,196,0.15);
+  width: 120px;
+  height: 92px;
+}
+.office-building.department {
+  border-color: #6C5CE7;
+  width: 110px;
+  height: 100px;
+}
+
+.office-avatar {
+  font-size: 26px;
+}
+.chairman .office-avatar { font-size: 30px; }
+
+.office-label {
+  font-size: 9px;
+  color: #8892b0;
+  text-align: center;
+  line-height: 1.2;
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.office-name {
+  font-size: 10px;
+  font-weight: 600;
+  color: #ccd6f6;
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Thought bubble */
+.thought-bubble {
+  position: absolute;
+  top: -30px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #2d3748;
+  color: #a0aec0;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 10px;
+  white-space: nowrap;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0;
+  transition: opacity 0.5s;
+  pointer-events: none;
+  z-index: 10;
+}
+.thought-bubble::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0; height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 5px solid #2d3748;
+}
+.thought-bubble.visible {
+  opacity: 0.9;
+}
+
+/* Status indicator */
+.status-dot {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #4a5568;
+}
+.status-dot.idle { background: #48bb78; }
+.status-dot.working { background: #4299e1; animation: pulse 1s infinite; }
+.status-dot.reporting { background: #ed8936; animation: pulse 0.6s infinite; }
+.status-dot.reviewing { background: #ecc94b; animation: pulse 1.5s infinite; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.6); }
+}
+
+/* Working animation */
+.working-particles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.particle {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: #4299e1;
+  opacity: 0;
+}
+.particle.active {
+  animation: particleFloat 2s infinite;
+}
+.particle:nth-child(1) { left: 20%; animation-delay: 0s; }
+.particle:nth-child(2) { left: 40%; animation-delay: 0.4s; }
+.particle:nth-child(3) { left: 60%; animation-delay: 0.8s; }
+.particle:nth-child(4) { left: 80%; animation-delay: 1.2s; }
+
+@keyframes particleFloat {
+  0% { bottom: 0; opacity: 0; }
+  20% { opacity: 0.8; }
+  100% { bottom: 100%; opacity: 0; }
+}
+
+/* SVG lines */
+#lines-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+.report-line {
+  stroke: #4a5568;
+  stroke-width: 1.5;
+  stroke-dasharray: 6 4;
+  transition: stroke 0.5s;
+}
+.report-line.active {
+  stroke: #f6c23e;
+  stroke-dasharray: 8 4;
+  animation: dashMove 1s linear infinite;
+}
+
+@keyframes dashMove {
+  to { stroke-dashoffset: -24; }
+}
+
+/* Walking agent */
+.walking-agent {
+  position: absolute;
+  font-size: 20px;
+  z-index: 20;
+  transition: left 0.8s ease-in-out, top 0.8s ease-in-out;
+  pointer-events: none;
+}
+.walking-agent.moving {
+  animation: walkBounce 0.3s infinite;
+}
+
+@keyframes walkBounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+/* Project banner */
+#project-banner {
+  position: absolute;
+  top: 8px;
+  right: 16px;
+  background: #1a1d2e;
+  border: 1px solid #2d3748;
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 11px;
+  color: #8892b0;
+  z-index: 30;
+}
+#project-banner .active-project {
+  color: #f6c23e;
+  font-weight: 600;
+}
+
+/* Members area in department office */
+.members-row {
+  display: flex;
+  gap: 2px;
+  font-size: 11px;
+}
+</style>
+</head>
+<body>
+
+<div id="viz-container">
+  <svg id="lines-svg"></svg>
+  <div id="project-banner">
+    <span id="proj-status">🏢 一人公司</span>
+    <span id="proj-name" style="display:none"> — <span class="active-project"></span></span>
+  </div>
+</div>
+
+<script>
+// Data will be injected by Python
+// __VIZ_DATA_PLACEHOLDER__
+
+const container = document.getElementById('viz-container');
+const linesSvg = document.getElementById('lines-svg');
+
+let offices = [];
+let walkingAgent = null;
+
+function init() {
+  const data = typeof VIZ_DATA !== 'undefined' ? VIZ_DATA : { offices: [], reports: [], project: {} };
+
+  // Update project banner
+  if (data.project && data.project.name) {
+    document.getElementById('proj-status').textContent = {pending:'⏳', in_progress:'🔄', review:'👁', done:'✅'}[data.project.status] || '🏢';
+    document.getElementById('proj-name').style.display = 'inline';
+    document.getElementById('proj-name').querySelector('.active-project').textContent = data.project.name;
+  }
+
+  const w = container.clientWidth;
+  const h = container.clientHeight;
+
+  // Draw reporting lines
+  drawLines(data.reports || [], w, h);
+
+  // Create offices
+  data.offices?.forEach(o => createOffice(o, w, h));
+
+  // Random thought bubble rotation
+  setInterval(cycleThoughts, 4000);
+  cycleThoughts();
+
+  // Simulation tick
+  setInterval(simulationTick, 800);
+}
+
+function createOffice(data, cw, ch) {
+  const x = (data.position?.x || 50) / 100 * cw;
+  const y = (data.position?.y || 50) / 100 * ch;
+
+  const el = document.createElement('div');
+  el.className = 'office';
+  el.id = `office-${data.id}`;
+  el.style.left = x + 'px';
+  el.style.top = y + 'px';
+  el.dataset.type = data.type;
+  el.dataset.thought = data.thought || '';
+
+  el.innerHTML = `
+    <div class="thought-bubble"></div>
+    <div class="office-building ${data.type}">
+      <div class="status-dot ${data.status || 'idle'}"></div>
+      <div class="office-avatar">${data.avatar || '🤖'}</div>
+      <div class="office-name">${data.name || '?'}</div>
+      <div class="office-label">${data.label || ''}</div>
+      ${data.members ? `<div class="members-row">${data.members.map(m => m.avatar || '🧑‍💻').join('')}</div>` : ''}
+      <div class="working-particles">
+        <div class="particle ${data.status === 'working' ? 'active' : ''}"></div>
+        <div class="particle ${data.status === 'working' ? 'active' : ''}"></div>
+        <div class="particle ${data.status === 'working' ? 'active' : ''}"></div>
+        <div class="particle ${data.status === 'working' ? 'active' : ''}"></div>
+      </div>
+    </div>
+  `;
+
+  container.appendChild(el);
+  offices.push({ id: data.id, el, x, y, type: data.type, status: data.status, avatar: data.avatar });
+}
+
+function drawLines(reports, w, h) {
+  let svgInner = '';
+  reports.forEach(r => {
+    const fromEl = document.getElementById(`office-${r.from}`);
+    const toEl = document.getElementById(`office-${r.to}`);
+    if (fromEl && toEl) {
+      const x1 = parseFloat(fromEl.style.left);
+      const y1 = parseFloat(fromEl.style.top);
+      const x2 = parseFloat(toEl.style.left);
+      const y2 = parseFloat(toEl.style.top);
+      svgInner += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="report-line ${r.active ? 'active' : ''}"/>`;
+    }
+  });
+  linesSvg.innerHTML = svgInner;
+}
+
+function cycleThoughts() {
+  offices.forEach((o, i) => {
+    const bubble = o.el.querySelector('.thought-bubble');
+    const thought = o.el.dataset.thought;
+    if (bubble && thought) {
+      bubble.textContent = thought;
+      bubble.classList.add('visible');
+      setTimeout(() => bubble.classList.remove('visible'), 2500);
+    }
+  });
+}
+
+function simulationTick() {
+  const activeOffice = offices.find(o => o.status === 'reporting');
+  if (activeOffice && !walkingAgent) {
+    // Animate walking from department to CEO
+    const ceoOffice = offices.find(o => o.type === 'ceo');
+    if (ceoOffice) {
+      walkBetween(activeOffice, ceoOffice, () => {
+        // Then CEO walks to chairman
+        const chairmanOffice = offices.find(o => o.type === 'chairman');
+        if (chairmanOffice) {
+          setTimeout(() => walkBetween(ceoOffice, chairmanOffice, null), 1000);
+        }
+      });
+    }
+  }
+}
+
+function walkBetween(from, to, callback) {
+  walkingAgent = document.createElement('div');
+  walkingAgent.className = 'walking-agent moving';
+  walkingAgent.textContent = from.avatar || '🤖';
+  walkingAgent.style.left = from.el.style.left;
+  walkingAgent.style.top = from.el.style.top;
+  container.appendChild(walkingAgent);
+
+  requestAnimationFrame(() => {
+    walkingAgent.style.left = to.el.style.left;
+    walkingAgent.style.top = to.el.style.top;
+  });
+
+  setTimeout(() => {
+    if (walkingAgent) {
+      walkingAgent.remove();
+      walkingAgent = null;
+    }
+    if (callback) callback();
+  }, 900);
+}
+
+// Initialize
+window.addEventListener('DOMContentLoaded', init);
+window.addEventListener('resize', () => {
+  offices = [];
+  container.querySelectorAll('.office').forEach(el => el.remove());
+  init();
+});
+</script>
+</body>
+</html>

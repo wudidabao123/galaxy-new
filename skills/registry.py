@@ -98,3 +98,37 @@ def get_registry() -> SkillRegistry:
 
 def register_skill(sid: str, name: str, fn: Callable, desc: str) -> None:
     get_registry().register(sid, name, fn, desc)
+
+
+def build_skills_summary_for(skill_ids: list[str]) -> str:
+    """Build a text summary for a specific set of skill IDs.
+    Only lists tools the agent actually has access to, saving tokens."""
+    registry = get_registry()
+    if not skill_ids:
+        return "(No tools assigned)"
+
+    lines = ["## Available Tools & Skills"]
+    seen = set()
+    for sid in skill_ids:
+        if sid in seen:
+            continue
+        seen.add(sid)
+        info = registry.get(sid)
+        if not info:
+            continue
+        import inspect
+        try:
+            sig = str(inspect.signature(info.fn))
+            sig_short = sig if len(sig) <= 120 else sig[:117] + "..."
+        except Exception:
+            sig_short = "(...)"
+        lines.append(f"- **{sid}** ({info.name}): {info.desc} — `{sig_short}`")
+    return "\n".join(lines)
+
+
+def build_all_skills_summary() -> str:
+    """Build a text summary of all registered tools (for admin preview, NOT for agent context).
+    Prefer build_skills_summary_for() when injecting context into soul agents."""
+    registry = get_registry()
+    skills = registry.list_all()
+    return build_skills_summary_for(list(skills.keys()))

@@ -155,8 +155,20 @@ def create_agents_for_team(
 
 
 def _build_system_prompt(role: dict) -> str:
-    """Build the system prompt for a role, including custom skills as knowledge."""
+    """Build the system prompt for a role, including custom skills as knowledge
+    and soul agent context if applicable."""
     prompt = role.get("prompt", "You are a helpful assistant.")
+
+    # Inject soul agent context if this role uses one
+    soul_agent_id = role.get("soul_agent_id", "")
+    if soul_agent_id:
+        try:
+            from data.soul_store import build_soul_agent_context
+            soul_ctx = build_soul_agent_context(soul_agent_id, task="")
+            if soul_ctx:
+                prompt += f"\n\n{soul_ctx}"
+        except Exception:
+            pass
 
     # Inject advanced role profile
     advanced = role.get("advanced", {})

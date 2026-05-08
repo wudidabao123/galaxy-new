@@ -166,9 +166,70 @@ def init_db() -> None:
             updated_at TEXT DEFAULT (datetime('now'))
         );
 
+        CREATE TABLE IF NOT EXISTS soul_agents (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            avatar TEXT NOT NULL DEFAULT '🤖',
+            soul_md TEXT NOT NULL DEFAULT '',
+            worker_thought TEXT NOT NULL DEFAULT '',
+            notes TEXT NOT NULL DEFAULT '',
+            projects_json TEXT NOT NULL DEFAULT '[]',
+            lifespan_budget INTEGER NOT NULL DEFAULT 128000,
+            position TEXT NOT NULL DEFAULT '',
+            department_id TEXT,
+            model_id TEXT NOT NULL DEFAULT '',
+            skills_json TEXT NOT NULL DEFAULT '[]',
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS company_departments (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            head_agent_id TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (head_agent_id) REFERENCES soul_agents(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS company_projects (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'pending',
+            chairman_id TEXT,
+            ceo_agent_id TEXT,
+            run_id TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (ceo_agent_id) REFERENCES soul_agents(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS project_assignments (
+            id TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL,
+            from_agent_id TEXT,
+            to_agent_id TEXT NOT NULL,
+            task_description TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'pending',
+            report_text TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (project_id) REFERENCES company_projects(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS company_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL DEFAULT ''
+        );
+
         CREATE INDEX IF NOT EXISTS idx_stage_logs_run ON stage_logs(run_id);
         CREATE INDEX IF NOT EXISTS idx_tool_logs_run ON tool_logs(run_id);
         CREATE INDEX IF NOT EXISTS idx_teams_category ON teams(category);
+        CREATE INDEX IF NOT EXISTS idx_soul_agents_dept ON soul_agents(department_id);
+        CREATE INDEX IF NOT EXISTS idx_assignments_project ON project_assignments(project_id);
+        CREATE INDEX IF NOT EXISTS idx_company_projects_status ON company_projects(status);
     """)
     conn.commit()
     # B3: periodic WAL checkpoint to prevent unchecked WAL file growth

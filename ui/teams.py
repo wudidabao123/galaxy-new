@@ -11,6 +11,7 @@ import streamlit as st
 from config import DATA_DIR, AGENT_COLORS, AGENT_AVATARS, AVATAR_EMOJIS
 from data.team_store import list_teams, get_team, save_team, delete_team
 from data.model_store import list_models
+from data.soul_store import list_soul_agents, get_soul_agent, build_soul_agent_context
 from skills.registry import get_registry
 from presets.teams import CATEGORIES, PRESET_TEAMS
 from ui.skills import _ai_call_json
@@ -322,6 +323,51 @@ def render_teams_tab() -> None:
                             team["roles"] = roles
                             save_team(team)
                             st.rerun()
+
+                    # ── Agent type: fake human vs soul agent ──
+                    soul_agents = list_soul_agents()
+                    agent_type = "fake" if not role.get("soul_agent_id") else "soul"
+                    at_c1, at_c2 = st.columns([1, 2])
+                    with at_c1:
+                        agent_type = st.selectbox(
+                            "Agent 类型",
+                            ["fake", "soul"],
+                            index=0 if agent_type == "fake" else 1,
+                            format_func=lambda x: "👤 伪人（一次性）" if x == "fake" else "🧬 灵魂 Agent",
+                            key=f"role_agent_type_{selected_team_id}_{i}",
+                        )
+                    with at_c2:
+                        if agent_type == "soul":
+                            soul_options = {sa["id"]: f"{sa['avatar']} {sa['name']}" for sa in soul_agents}
+                            current_soul = role.get("soul_agent_id", "")
+                            if soul_options:
+                                if current_soul not in soul_options:
+                                    current_soul = list(soul_options.keys())[0]
+                                role["soul_agent_id"] = st.selectbox(
+                                    "选择灵魂 Agent",
+                                    list(soul_options.keys()),
+                                    format_func=lambda x: soul_options.get(x, x),
+                                    index=list(soul_options.keys()).index(current_soul),
+                                    key=f"role_soul_{selected_team_id}_{i}",
+                                )
+                                # Load soul agent data for display
+                                sa = get_soul_agent(role["soul_agent_id"])
+                                if sa:
+                                    st.caption(f"💬: {sa.get('worker_thought','') or '(无碎碎念)'}")
+                                    # Auto-fill from soul agent if prompt is empty
+                                    if not role.get("prompt"):
+                                        role["prompt"] = sa.get("soul_md", "")[:200]
+                                    # Inherit skills from soul if role has none
+                                    if not role.get("skills"):
+                                        role["skills"] = sa.get("skills", [])
+                                    # Use soul agent's model if role has none
+                                    if not role.get("model_id") and sa.get("model_id"):
+                                        role["model_id"] = sa["model_id"]
+                            else:
+                                st.caption("⚠️ 无可用灵魂 Agent")
+                                role.pop("soul_agent_id", None)
+                        else:
+                            role.pop("soul_agent_id", None)
 
                     current_skills = role.get("skills", [])
                     role["skills"] = st.multiselect(

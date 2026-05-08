@@ -31,6 +31,8 @@ from ui.models import render_models_tab
 from ui.runs import render_runs_tab
 from ui.config_ui import render_config_tab
 from ui.skills import render_skills_tab
+from ui.souls import render_souls_tab
+from ui.company import render_company_tab
 from ui.components import inject_clean_ui
 
 # ── Page config ──────────────────────────────────────
@@ -58,6 +60,10 @@ with st.sidebar:
     st.caption(f"模型: {len(models)}")
     from data.team_store import list_teams
     st.caption(f"团队: {len(list_teams())}")
+    from data.soul_store import list_soul_agents
+    st.caption(f"灵魂Agent: {len(list_soul_agents())}")
+    from data.company_store import list_departments
+    st.caption(f"部门: {len(list_departments())}")
     from data.session_store import list_sessions
     st.caption(f"聊天记录: {len(list_sessions())}")
 
@@ -80,7 +86,7 @@ st.caption("多 Agent 编码工作台 · 并发工程 · 跨平台工具 · 多�
 if st.session_state.active_tab == "🛠️ 技能":
     st.session_state.active_tab = "🛠️ 工具和技能"
 
-tab_options = ["💬 对话", "👥 团队", "🔑 模型", "🛠️ 工具和技能", "📊 运行记录", "⚙️ 配置"]
+tab_options = ["💬 对话", "👥 团队", "🧬 灵魂Agent", "🏢 一人公司", "🔑 模型", "🛠️ 工具和技能", "📊 运行记录", "⚙️ 配置"]
 if st.session_state.active_tab not in tab_options:
     st.session_state.active_tab = tab_options[0]
 
@@ -96,6 +102,10 @@ if active_tab == "💬 对话":
     render_chat_tab()
 elif active_tab == "👥 团队":
     render_teams_tab()
+elif active_tab == "🧬 灵魂Agent":
+    render_souls_tab()
+elif active_tab == "🏢 一人公司":
+    render_company_tab()
 elif active_tab == "🔑 模型":
     render_models_tab()
 elif active_tab == "🛠️ 工具和技能":
